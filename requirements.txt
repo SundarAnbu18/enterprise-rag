@@ -1,0 +1,16 @@
+# The engine
+faiss-cpu>=1.13
+sentence-transformers>=5.1
+numpy
+
+# Providers — each tenant uses one of these with their own key
+anthropic>=0.120
+google-genai>=1.0
+
+# Secrets at rest (provider keys are Fernet-encrypted when this is installed)
+cryptography>=42
+
+# The web layer
+Django>=4.2,<5
+django-cors-headers>=4.9
+gunicorn>=21

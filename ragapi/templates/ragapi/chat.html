@@ -1,0 +1,155 @@
+{% load static %}<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ tenant.name }} — Assistant</title>
+  <style>
+    :root {
+      --bg: #f5f6f8; --panel: #ffffff; --ink: #1c2733; --muted: #6b7684;
+      --accent: #1f6feb; --accent-ink: #ffffff; --border: #e2e6eb;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--ink);
+      font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex; flex-direction: column; min-height: 100vh;
+    }
+    header {
+      background: var(--panel); border-bottom: 1px solid var(--border);
+      padding: 14px 20px; display: flex; align-items: baseline; gap: 10px;
+    }
+    header h1 { font-size: 17px; margin: 0; }
+    header .badge {
+      font-size: 12px; color: var(--muted); border: 1px solid var(--border);
+      border-radius: 999px; padding: 2px 10px;
+    }
+    main {
+      flex: 1; width: 100%; max-width: 760px; margin: 0 auto; padding: 20px;
+      display: flex; flex-direction: column; gap: 12px;
+    }
+    .msg { max-width: 85%; padding: 10px 14px; border-radius: 12px; white-space: pre-wrap; }
+    .msg.user { align-self: flex-end; background: var(--accent); color: var(--accent-ink); border-bottom-right-radius: 4px; }
+    .msg.bot { align-self: flex-start; background: var(--panel); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+    .msg.error { align-self: flex-start; background: #fdecec; border: 1px solid #f5c2c0; color: #8a1f1b; }
+    .sources { margin-top: 8px; font-size: 12px; color: var(--muted); }
+    .sources span {
+      display: inline-block; border: 1px solid var(--border); border-radius: 999px;
+      padding: 1px 8px; margin: 2px 4px 0 0; background: var(--bg);
+    }
+    .typing { align-self: flex-start; color: var(--muted); font-size: 13px; padding: 4px 2px; }
+    form {
+      position: sticky; bottom: 0; background: var(--bg);
+      padding: 12px 20px 20px; width: 100%; max-width: 760px; margin: 0 auto;
+      display: flex; gap: 10px;
+    }
+    textarea {
+      flex: 1; resize: none; border: 1px solid var(--border); border-radius: 10px;
+      padding: 11px 14px; font: inherit; background: var(--panel); color: var(--ink);
+      min-height: 46px; max-height: 160px;
+    }
+    textarea:focus { outline: 2px solid var(--accent); border-color: transparent; }
+    button {
+      border: 0; border-radius: 10px; background: var(--accent); color: var(--accent-ink);
+      font: inherit; font-weight: 600; padding: 0 22px; cursor: pointer;
+    }
+    button:disabled { opacity: .5; cursor: default; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>{{ tenant.name }} assistant</h1>
+    <span class="badge">{{ tenant.provider }} · {{ tenant.model }}</span>
+  </header>
+
+  <main id="thread">
+    <div class="msg bot">Hi! Ask me anything about {{ tenant.name }}&rsquo;s knowledge base.</div>
+  </main>
+
+  <form id="chat-form" autocomplete="off">
+    {% csrf_token %}
+    <textarea id="question" rows="1" placeholder="Ask a question…" required maxlength="2000"></textarea>
+    <button id="send" type="submit">Send</button>
+  </form>
+
+  <script>
+    (function () {
+      const thread = document.getElementById("thread");
+      const form = document.getElementById("chat-form");
+      const input = document.getElementById("question");
+      const send = document.getElementById("send");
+      const csrf = form.querySelector("[name=csrfmiddlewaretoken]").value;
+      // One conversation per page load; the server replays these turns to the model.
+      const conversationId = (crypto.randomUUID && crypto.randomUUID()) || null;
+
+      function add(kind, text) {
+        const div = document.createElement("div");
+        div.className = "msg " + kind;
+        div.textContent = text;
+        thread.appendChild(div);
+        div.scrollIntoView({ behavior: "smooth", block: "end" });
+        return div;
+      }
+
+      function addSources(target, sources) {
+        if (!sources || !sources.length) return;
+        const box = document.createElement("div");
+        box.className = "sources";
+        box.append("Sources: ");
+        const seen = new Set();
+        sources.forEach(function (s) {
+          if (seen.has(s.source)) return;
+          seen.add(s.source);
+          const chip = document.createElement("span");
+          chip.textContent = s.source;
+          box.appendChild(chip);
+        });
+        target.appendChild(box);
+      }
+
+      form.addEventListener("submit", async function (event) {
+        event.preventDefault();
+        const question = input.value.trim();
+        if (!question) return;
+
+        add("user", question);
+        input.value = "";
+        send.disabled = true;
+        const typing = document.createElement("div");
+        typing.className = "typing";
+        typing.textContent = "Thinking…";
+        thread.appendChild(typing);
+
+        try {
+          const response = await fetch(window.location.pathname, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-CSRFToken": csrf },
+            body: JSON.stringify({ question: question, conversation_id: conversationId }),
+          });
+          const data = await response.json();
+          typing.remove();
+          if (!response.ok) {
+            add("error", data.error || "Something went wrong.");
+          } else {
+            const bubble = add("bot", data.answer);
+            addSources(bubble, data.sources);
+          }
+        } catch (err) {
+          typing.remove();
+          add("error", "Network error — please try again.");
+        } finally {
+          send.disabled = false;
+          input.focus();
+        }
+      });
+
+      input.addEventListener("keydown", function (event) {
+        if (event.key === "Enter" && !event.shiftKey) {
+          event.preventDefault();
+          form.requestSubmit();
+        }
+      });
+    })();
+  </script>
+</body>
+</html>
