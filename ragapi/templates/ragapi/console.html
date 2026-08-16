@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RAG Console</title>
+  <style>
+    :root {
+      --bg: #f5f6f8; --panel: #ffffff; --ink: #1c2733; --muted: #6b7684;
+      --accent: #1f6feb; --accent-ink: #ffffff; --border: #e2e6eb;
+      --ok: #1a7f37; --ok-bg: #e6f4ea; --warn: #9a6700; --warn-bg: #fff8e5;
+      --danger: #8a1f1b; --danger-bg: #fdecec;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--ink);
+      font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    header {
+      background: var(--panel); border-bottom: 1px solid var(--border);
+      padding: 14px 24px; display: flex; align-items: baseline; gap: 10px;
+    }
+    header h1 { font-size: 17px; margin: 0; }
+    .badge {
+      font-size: 12px; color: var(--muted); border: 1px solid var(--border);
+      border-radius: 999px; padding: 2px 10px;
+    }
+    main { max-width: 1000px; margin: 0 auto; padding: 24px 20px 60px; }
+    .card {
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: 12px; padding: 20px; margin-bottom: 16px;
+    }
+    h2 { font-size: 16px; margin: 0 0 12px; }
+    h3 { font-size: 14px; margin: 20px 0 8px; }
+    label { display: block; font-size: 13px; color: var(--muted); margin: 12px 0 4px; }
+    input[type=text], input[type=password], select {
+      width: 100%; border: 1px solid var(--border); border-radius: 8px;
+      padding: 9px 12px; font: inherit; background: var(--panel); color: var(--ink);
+    }
+    input:focus, select:focus { outline: 2px solid var(--accent); border-color: transparent; }
+    button {
+      border: 0; border-radius: 8px; background: var(--accent); color: var(--accent-ink);
+      font: inherit; font-weight: 600; padding: 9px 18px; cursor: pointer;
+    }
+    button.secondary { background: var(--panel); color: var(--ink); border: 1px solid var(--border); }
+    button:disabled { opacity: .5; cursor: default; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th { text-align: left; color: var(--muted); font-weight: 500; font-size: 12px;
+         text-transform: uppercase; letter-spacing: .04em; }
+    th, td { padding: 9px 10px; border-bottom: 1px solid var(--border); }
+    tbody tr:hover { background: var(--bg); cursor: pointer; }
+    tbody tr:last-child td { border-bottom: 0; }
+    .chip { font-size: 12px; border-radius: 999px; padding: 2px 10px; white-space: nowrap; }
+    .chip.ok { color: var(--ok); background: var(--ok-bg); }
+    .chip.warn { color: var(--warn); background: var(--warn-bg); }
+    .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+    .toolbar .right { display: flex; gap: 8px; }
+    .error { color: var(--danger); background: var(--danger-bg); border: 1px solid #f5c2c0;
+             border-radius: 8px; padding: 10px 14px; margin: 12px 0; font-size: 14px; }
+    .notice { color: var(--ok); background: var(--ok-bg); border: 1px solid #b7e1c3;
+              border-radius: 8px; padding: 10px 14px; margin: 12px 0; font-size: 14px; }
+    .hidden { display: none; }
+    pre.snippet {
+      background: #0f172a; color: #e2e8f0; border-radius: 10px; padding: 14px 16px;
+      overflow-x: auto; font: 12.5px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+      position: relative; white-space: pre;
+    }
+    .snippet-wrap { position: relative; margin: 8px 0 16px; }
+    .snippet-wrap button {
+      position: absolute; top: 8px; right: 8px; font-size: 12px; padding: 4px 10px;
+      background: rgba(255,255,255,.12); color: #e2e8f0;
+    }
+    .keybox {
+      display: flex; gap: 8px; align-items: center; background: var(--warn-bg);
+      border: 1px solid #f0d98c; border-radius: 10px; padding: 12px 14px; margin: 8px 0 4px;
+    }
+    .keybox code { font-size: 13px; word-break: break-all; flex: 1; }
+    .hint { font-size: 12.5px; color: var(--muted); margin: 4px 0 0; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+    @media (max-width: 640px) { .grid2 { grid-template-columns: 1fr; } }
+    a { color: var(--accent); }
+    .muted { color: var(--muted); }
+    .filelist { font-size: 13px; color: var(--muted); margin-top: 6px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>RAG Console</h1>
+    <span class="badge" id="backend-badge">vector backend: …</span>
+    <span style="flex:1"></span>
+    <button class="secondary hidden" id="lock-btn" style="font-weight:500; font-size:13px; padding:5px 12px;">Lock</button>
+  </header>
+
+  <main>
+    <!-- ============ 1. Admin key gate ============ -->
+    <section id="gate" class="card">
+      <h2>Operator sign-in</h2>
+      <p class="muted" style="margin:0">Enter the <code>ENTERPRISE_ADMIN_API_KEY</code> from the server's <code>.env</code>. It stays in this browser tab only.</p>
+      <label for="admin-key">Admin key</label>
+      <input type="password" id="admin-key" autocomplete="off" placeholder="paste the operator key">
+      <div id="gate-error" class="error hidden"></div>
+      <div style="margin-top:14px"><button id="connect-btn">Connect</button></div>
+    </section>
+
+    <!-- ============ 2. Client list ============ -->
+    <section id="dash" class="hidden">
+      <div class="toolbar">
+        <h2 style="margin:0">Clients</h2>
+        <div class="right">
+          <button class="secondary" id="refresh-btn">Refresh</button>
+          <button id="new-btn">New client</button>
+        </div>
+      </div>
+      <div class="card" style="padding:6px 12px">
+        <table>
+          <thead>
+            <tr><th>Client</th><th>Platform</th><th>Model</th><th>Vectors</th><th>Index</th><th>Chat</th></tr>
+          </thead>
+          <tbody id="client-rows"></tbody>
+        </table>
+        <p id="empty-note" class="muted hidden" style="padding:8px 4px">No clients yet — create the first one.</p>
+      </div>
+      <div id="dash-error" class="error hidden"></div>
+    </section>
+
+    <!-- ============ 3. Client detail ============ -->
+    <section id="detail" class="hidden">
+      <div class="toolbar">
+        <h2 style="margin:0" id="detail-title">Client</h2>
+        <button class="secondary" id="detail-back">&larr; All clients</button>
+      </div>
+      <div class="card">
+        <div class="grid2">
+          <div><label>Slug</label><div id="d-slug"></div></div>
+          <div><label>Platform · model</label><div id="d-platform"></div></div>
+          <div><label>Vectors in index</label><div id="d-vectors"></div></div>
+          <div><label>Hosted chat</label><div id="d-chat"></div></div>
+        </div>
+        <h3>Documents</h3>
+        <table>
+          <thead><tr><th>File</th><th>Size</th><th>Chunks</th></tr></thead>
+          <tbody id="doc-rows"></tbody>
+        </table>
+        <p id="doc-empty" class="muted hidden">No documents uploaded yet.</p>
+        <h3>Add documents</h3>
+        <p class="hint">.md or .txt, up to 2&nbsp;MB each. Uploading reindexes immediately.</p>
+        <input type="file" id="d-files" multiple accept=".md,.txt" style="margin-top:6px">
+        <div style="margin-top:10px"><button id="d-upload-btn">Upload &amp; reindex</button></div>
+        <div id="detail-error" class="error hidden"></div>
+        <div id="detail-notice" class="notice hidden"></div>
+        <h3>Client integration</h3>
+        <p class="hint">The workspace API key was shown once, at creation. Point client code at:</p>
+        <div class="snippet-wrap">
+          <pre class="snippet" id="d-snippet"></pre>
+          <button data-copy="d-snippet">Copy</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 4. New client form ============ -->
+    <section id="new" class="hidden">
+      <div class="toolbar">
+        <h2 style="margin:0">New client</h2>
+        <button class="secondary" id="new-back">Cancel</button>
+      </div>
+      <div class="card">
+        <label for="n-name">Company name</label>
+        <input type="text" id="n-name" placeholder="Acme Corp">
+        <div class="grid2">
+          <div>
+            <label for="n-provider">LLM platform</label>
+            <select id="n-provider">
+              <option value="anthropic">Anthropic (Claude)</option>
+              <option value="gemini">Google (Gemini)</option>
+            </select>
+          </div>
+          <div>
+            <label for="n-model">Model <span class="muted">(blank = platform default)</span></label>
+            <input type="text" id="n-model" placeholder="claude-opus-5">
+          </div>
+        </div>
+        <label for="n-key">Client's own LLM API key</label>
+        <input type="password" id="n-key" autocomplete="off" placeholder="sk-ant-… or AIza…">
+        <p class="hint">Stored encrypted on the server; used only for this client's questions.</p>
+        <label for="n-files">Knowledge-base documents (.md / .txt)</label>
+        <input type="file" id="n-files" multiple accept=".md,.txt">
+        <div class="filelist" id="n-filelist"></div>
+        <label style="display:flex; align-items:center; gap:8px; margin-top:14px; color:var(--ink)">
+          <input type="checkbox" id="n-chat" checked> Enable the hosted chat page
+        </label>
+        <div id="new-error" class="error hidden"></div>
+        <div style="margin-top:16px"><button id="create-btn">Create client</button></div>
+      </div>
+    </section>
+
+    <!-- ============ 5. Created — key reveal + snippet ============ -->
+    <section id="created" class="hidden">
+      <div class="toolbar"><h2 style="margin:0" id="c-title">Client created</h2></div>
+      <div class="card">
+        <h3 style="margin-top:0">Workspace API key — shown only once</h3>
+        <div class="keybox">
+          <code id="c-key"></code>
+          <button data-copy="c-key" style="font-size:12px; padding:5px 12px">Copy</button>
+        </div>
+        <p class="hint">Store it now. The server keeps only a hash; there is no way to display it again (a lost key means onboarding support to rotate it).</p>
+        <div id="c-uploads" class="notice hidden"></div>
+        <div id="c-upload-errors" class="error hidden"></div>
+
+        <h3>Hosted chat</h3>
+        <p style="margin:4px 0"><a id="c-chat-link" target="_blank" rel="noopener"></a></p>
+
+        <h3>Add to the client's code</h3>
+        <p class="hint">Environment line first, then a ready-made call — everything under the chat above is what the client's developers need.</p>
+        <div class="snippet-wrap">
+          <pre class="snippet" id="c-env"></pre>
+          <button data-copy="c-env">Copy</button>
+        </div>
+        <div class="snippet-wrap">
+          <pre class="snippet" id="c-curl"></pre>
+          <button data-copy="c-curl">Copy</button>
+        </div>
+        <div class="snippet-wrap">
+          <pre class="snippet" id="c-js"></pre>
+          <button data-copy="c-js">Copy</button>
+        </div>
+        <div style="margin-top:8px"><button id="created-done">Done — back to clients</button></div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      "use strict";
+      const $ = (id) => document.getElementById(id);
+      const SECTIONS = ["gate", "dash", "detail", "new", "created"];
+      const MAX_DOC_BYTES = 2 * 1024 * 1024;
+      let adminKey = sessionStorage.getItem("eragAdminKey") || "";
+      let backend = "…";
+
+      function show(section) {
+        SECTIONS.forEach((s) => $(s).classList.toggle("hidden", s !== section));
+        $("lock-btn").classList.toggle("hidden", section === "gate");
+      }
+      function setError(id, message) {
+        const el = $(id);
+        el.classList.toggle("hidden", !message);
+        el.textContent = message || "";
+      }
+      function fmtBytes(n) {
+        if (n < 1024) return n + " B";
+        if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
+        return (n / 1024 / 1024).toFixed(2) + " MB";
+      }
+
+      async function api(path, options) {
+        const opts = options || {};
+        opts.headers = Object.assign(
+          { "X-Admin-Key": adminKey },
+          opts.body ? { "Content-Type": "application/json" } : {},
+          opts.headers || {}
+        );
+        const response = await fetch(path, opts);
+        let data = {};
+        try { data = await response.json(); } catch (e) { /* non-JSON error page */ }
+        if (!response.ok) {
+          const err = new Error(data.error || ("HTTP " + response.status));
+          err.status = response.status;
+          throw err;
+        }
+        return data;
+      }
+
+      // ---- gate -----------------------------------------------------------
+      async function connect(key) {
+        adminKey = key;
+        const data = await api("/api/v1/tenants/");
+        sessionStorage.setItem("eragAdminKey", key);
+        backend = data.backend || "faiss";
+        $("backend-badge").textContent = "vector backend: " + backend;
+        renderClients(data.tenants);
+        show("dash");
+      }
+      $("connect-btn").addEventListener("click", async () => {
+        setError("gate-error", "");
+        const key = $("admin-key").value.trim();
+        if (!key) return setError("gate-error", "Paste the operator key first.");
+        $("connect-btn").disabled = true;
+        try { await connect(key); }
+        catch (err) {
+          setError("gate-error", err.status === 401
+            ? "That key was refused."
+            : err.message);
+        }
+        finally { $("connect-btn").disabled = false; }
+      });
+      $("admin-key").addEventListener("keydown", (e) => {
+        if (e.key === "Enter") $("connect-btn").click();
+      });
+      $("lock-btn").addEventListener("click", () => {
+        sessionStorage.removeItem("eragAdminKey");
+        adminKey = "";
+        $("admin-key").value = "";
+        show("gate");
+      });
+
+      // ---- client list ------------------------------------------------------
+      function renderClients(tenants) {
+        const rows = $("client-rows");
+        rows.textContent = "";
+        $("empty-note").classList.toggle("hidden", tenants.length > 0);
+        tenants.forEach((t) => {
+          const tr = document.createElement("tr");
+          const cells = [
+            t.name, t.provider, t.model, String(t.vectors),
+          ];
+          cells.forEach((text) => {
+            const td = document.createElement("td");
+            td.textContent = text;
+            tr.appendChild(td);
+          });
+          const status = document.createElement("td");
+          const chip = document.createElement("span");
+          chip.className = "chip " + (t.index_ready ? "ok" : "warn");
+          chip.textContent = t.index_ready ? "ready" : "no index";
+          status.appendChild(chip);
+          tr.appendChild(status);
+          const chat = document.createElement("td");
+          if (t.chat_enabled) {
+            const a = document.createElement("a");
+            a.href = t.chat_url; a.target = "_blank"; a.rel = "noopener";
+            a.textContent = "open";
+            a.addEventListener("click", (e) => e.stopPropagation());
+            chat.appendChild(a);
+          } else {
+            chat.textContent = "off";
+            chat.className = "muted";
+          }
+          tr.appendChild(chat);
+          tr.addEventListener("click", () => openDetail(t.slug));
+          rows.appendChild(tr);
+        });
+      }
+      async function refresh() {
+        setError("dash-error", "");
+        try {
+          const data = await api("/api/v1/tenants/");
+          renderClients(data.tenants);
+        } catch (err) { setError("dash-error", err.message); }
+      }
+      $("refresh-btn").addEventListener("click", refresh);
+      $("new-btn").addEventListener("click", () => { resetNewForm(); show("new"); });
+
+      // ---- detail -----------------------------------------------------------
+      let currentSlug = null;
+      async function openDetail(slug) {
+        currentSlug = slug;
+        setError("detail-error", "");
+        $("detail-notice").classList.add("hidden");
+        $("d-files").value = "";
+        try {
+          const t = await api("/api/v1/tenants/" + slug + "/");
+          $("detail-title").textContent = t.name;
+          $("d-slug").textContent = t.slug;
+          $("d-platform").textContent = t.provider + " · " + t.model;
+          $("d-vectors").textContent = t.vectors + " vectors in " + t.backend;
+          const chat = $("d-chat");
+          chat.textContent = "";
+          if (t.chat_enabled) {
+            const a = document.createElement("a");
+            a.href = t.chat_url; a.target = "_blank"; a.rel = "noopener";
+            a.textContent = location.origin + t.chat_url;
+            chat.appendChild(a);
+          } else { chat.textContent = "disabled"; }
+          const rows = $("doc-rows");
+          rows.textContent = "";
+          $("doc-empty").classList.toggle("hidden", t.documents.length > 0);
+          t.documents.forEach((doc) => {
+            const tr = document.createElement("tr");
+            [doc.name, fmtBytes(doc.bytes), String(doc.chunks)].forEach((text) => {
+              const td = document.createElement("td");
+              td.textContent = text;
+              tr.appendChild(td);
+            });
+            tr.style.cursor = "default";
+            rows.appendChild(tr);
+          });
+          $("d-snippet").textContent = [
+            "ERAG_ASK_URL=" + location.origin + "/api/v1/ask/",
+            "ERAG_API_KEY=erag." + t.slug + ".<the key shown at creation>",
+          ].join("\n");
+          show("detail");
+        } catch (err) { setError("dash-error", err.message); }
+      }
+      $("detail-back").addEventListener("click", () => { show("dash"); refresh(); });
+
+      function readAsText(file) {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = () => reject(new Error("could not read " + file.name));
+          reader.readAsText(file);
+        });
+      }
+      async function uploadFiles(slug, files) {
+        const failures = [];
+        let uploaded = 0;
+        for (const file of files) {
+          if (!/\.(md|txt)$/i.test(file.name)) { failures.push(file.name + ": only .md/.txt"); continue; }
+          if (file.size > MAX_DOC_BYTES) { failures.push(file.name + ": over 2 MB"); continue; }
+          try {
+            const text = await readAsText(file);
+            await api("/api/v1/tenants/" + slug + "/documents/", {
+              method: "POST",
+              body: JSON.stringify({ filename: file.name, text: text }),
+            });
+            uploaded += 1;
+          } catch (err) { failures.push(file.name + ": " + err.message); }
+        }
+        return { uploaded, failures };
+      }
+      $("d-upload-btn").addEventListener("click", async () => {
+        const files = Array.from($("d-files").files);
+        setError("detail-error", "");
+        $("detail-notice").classList.add("hidden");
+        if (!files.length) return setError("detail-error", "Choose at least one file.");
+        $("d-upload-btn").disabled = true;
+        const { uploaded, failures } = await uploadFiles(currentSlug, files);
+        $("d-upload-btn").disabled = false;
+        if (failures.length) setError("detail-error", failures.join(" · "));
+        if (uploaded) {
+          const note = $("detail-notice");
+          note.textContent = uploaded + " document(s) indexed.";
+          note.classList.remove("hidden");
+          openDetail(currentSlug);
+        }
+      });
+
+      // ---- new client ---------------------------------------------------------
+      function resetNewForm() {
+        ["n-name", "n-model", "n-key"].forEach((id) => { $(id).value = ""; });
+        $("n-provider").value = "anthropic";
+        $("n-files").value = "";
+        $("n-chat").checked = true;
+        $("n-filelist").textContent = "";
+        setError("new-error", "");
+      }
+      $("n-files").addEventListener("change", () => {
+        $("n-filelist").textContent = Array.from($("n-files").files)
+          .map((f) => f.name + " (" + fmtBytes(f.size) + ")").join(" · ");
+      });
+      $("new-back").addEventListener("click", () => show("dash"));
+
+      $("create-btn").addEventListener("click", async () => {
+        setError("new-error", "");
+        const name = $("n-name").value.trim();
+        const providerKey = $("n-key").value.trim();
+        if (!name) return setError("new-error", "Company name is required.");
+        if (!providerKey) return setError("new-error", "The client's LLM API key is required.");
+        $("create-btn").disabled = true;
+        try {
+          const created = await api("/api/v1/tenants/", {
+            method: "POST",
+            body: JSON.stringify({
+              name: name,
+              provider: $("n-provider").value,
+              provider_api_key: providerKey,
+              model: $("n-model").value.trim() || null,
+              chat_enabled: $("n-chat").checked,
+            }),
+          });
+          const files = Array.from($("n-files").files);
+          let uploads = { uploaded: 0, failures: [] };
+          if (files.length) uploads = await uploadFiles(created.slug, files);
+          renderCreated(created, uploads);
+          show("created");
+        } catch (err) {
+          setError("new-error", err.status === 409
+            ? "A client with that name already exists — pick a different name."
+            : err.message);
+        } finally { $("create-btn").disabled = false; }
+      });
+
+      function renderCreated(created, uploads) {
+        $("c-title").textContent = created.name + " is onboarded";
+        $("c-key").textContent = created.api_key;
+        const link = $("c-chat-link");
+        if (created.chat_enabled) {
+          link.href = created.chat_url;
+          link.textContent = location.origin + created.chat_url;
+        } else {
+          link.removeAttribute("href");
+          link.textContent = "disabled for this workspace";
+        }
+        const note = $("c-uploads");
+        note.classList.toggle("hidden", !uploads.uploaded);
+        note.textContent = uploads.uploaded
+          ? uploads.uploaded + " document(s) uploaded and indexed — the workspace is ready to answer."
+          : "";
+        const errBox = $("c-upload-errors");
+        errBox.classList.toggle("hidden", !uploads.failures.length);
+        errBox.textContent = uploads.failures.length
+          ? "Some files were not indexed — " + uploads.failures.join(" · ")
+          : "";
+
+        const askUrl = location.origin + "/api/v1/ask/";
+        $("c-env").textContent = [
+          "# " + created.name + " — RAG workspace credentials",
+          "ERAG_API_KEY=" + created.api_key,
+          "ERAG_ASK_URL=" + askUrl,
+        ].join("\n");
+        $("c-curl").textContent = [
+          "curl -X POST \"" + askUrl + "\" \\",
+          "  -H \"Content-Type: application/json\" \\",
+          "  -H \"X-Api-Key: $ERAG_API_KEY\" \\",
+          "  -d '{\"question\": \"How do refunds work?\"}'",
+        ].join("\n");
+        $("c-js").textContent = [
+          "const res = await fetch(process.env.ERAG_ASK_URL, {",
+          "  method: \"POST\",",
+          "  headers: {",
+          "    \"Content-Type\": \"application/json\",",
+          "    \"X-Api-Key\": process.env.ERAG_API_KEY,",
+          "  },",
+          "  body: JSON.stringify({ question }),",
+          "});",
+          "const { answer, sources } = await res.json();",
+        ].join("\n");
+      }
+      $("created-done").addEventListener("click", () => { show("dash"); refresh(); });
+
+      // ---- copy buttons ------------------------------------------------------
+      document.addEventListener("click", (event) => {
+        const target = event.target.closest("[data-copy]");
+        if (!target) return;
+        const text = $(target.dataset.copy).textContent;
+        navigator.clipboard.writeText(text).then(() => {
+          const old = target.textContent;
+          target.textContent = "Copied";
+          setTimeout(() => { target.textContent = old; }, 1200);
+        });
+      });
+
+      // ---- boot ---------------------------------------------------------------
+      if (adminKey) {
+        connect(adminKey).catch(() => {
+          sessionStorage.removeItem("eragAdminKey");
+          adminKey = "";
+          show("gate");
+        });
+      } else {
+        show("gate");
+      }
+    })();
+  </script>
+</body>
+</html>

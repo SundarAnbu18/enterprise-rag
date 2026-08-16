@@ -3,6 +3,9 @@ faiss-cpu>=1.13
 sentence-transformers>=5.1
 numpy
 
+# Optional vector DB backend (ENTERPRISE_VECTOR_BACKEND=qdrant)
+qdrant-client>=1.10
+
 # Providers — each tenant uses one of these with their own key
 anthropic>=0.120
 google-genai>=1.0

@@ -1,0 +1,9 @@
+{
+  "collection": "erag-sundar-anbu",
+  "vectors": 29,
+  "sources": {
+    "sundar-knowledge-base.md": 29
+  },
+  "embedding_model": "all-MiniLM-L6-v2",
+  "built_at": "2026-08-15T21:36:40+00:00"
+}

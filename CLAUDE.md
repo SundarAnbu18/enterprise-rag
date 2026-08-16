@@ -85,6 +85,29 @@ encrypted), `documents/`, `index/`. Everything under `var/` is gitignored.
   carry no secrets; sharing the encoder and isolating the indexes is the
   intended split. Per-tenant choice exists only for the *chat* model.
 
+### The vector backend abstraction
+
+`ragengine/vectordb.py` decides where vectors live, chosen by
+`ENTERPRISE_VECTOR_BACKEND`: `faiss` (default — per-tenant `index.faiss` +
+`chunks.json`, nothing extra to run) or `qdrant` (one collection per tenant,
+`erag-<slug>`, on a Qdrant server). Callers use `save_index` / `load_store` /
+`index_stamp_path` / `index_info`; nothing above vectordb branches on the
+backend name. Qdrant rebuilds stamp `index/qdrant.json` so the
+mtime-cache-coordination invariant survives a server-side backend, and the
+stamp records the vector count so `load_store` refuses a drifted collection —
+the same in-step contract as FAISS. Tests run Qdrant with
+`ENTERPRISE_QDRANT_URL=:memory:` (in-process, no server) and are skipped when
+`qdrant-client` is absent.
+
+### The operator console
+
+`/console/` is a static shell (no auth on the page; every data call sends
+`X-Admin-Key`, so nothing leaks). It drives the admin API: list tenants with
+vector counts, `GET /api/v1/tenants/<slug>/` for per-document chunk counts,
+`POST /api/v1/tenants/<slug>/documents/` for operator uploads. Tenant API
+keys are still shown exactly once, at creation, together with copyable
+integration snippets.
+
 ### The provider abstraction
 
 `ragengine/providers/base.py` defines the whole contract: a system prompt

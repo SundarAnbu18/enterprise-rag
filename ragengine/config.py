@@ -62,6 +62,13 @@ def _env_int(name: str, default: int) -> int:
         raise ConfigurationError(f"{name} must be an integer, got {raw!r}") from exc
 
 
+def _env_choice(name: str, default: str, choices: tuple) -> str:
+    value = (os.environ.get(name) or default).strip().lower()
+    if value not in choices:
+        raise ConfigurationError(f"{name} must be one of {', '.join(choices)}; got {value!r}")
+    return value
+
+
 @dataclass(frozen=True)
 class Settings:
     """Resolved deployment-wide configuration for one process."""
@@ -74,6 +81,9 @@ class Settings:
     default_max_tokens: int
     history_db: str
     history_turns: int
+    vector_backend: str
+    qdrant_url: str
+    qdrant_api_key: str
 
     @property
     def tenants_dir(self) -> Path:
@@ -112,4 +122,14 @@ def get_settings() -> Settings:
         # silently wrong under gunicorn's multiple workers. See history.py.
         history_db=os.environ.get("ENTERPRISE_HISTORY_DB", ""),
         history_turns=_env_int("ENTERPRISE_HISTORY_TURNS", 6),
+        # Where vectors live: "faiss" keeps them in per-tenant files (default,
+        # nothing extra to run); "qdrant" keeps them in per-tenant collections
+        # on a Qdrant server. See vectordb.py for why both exist.
+        vector_backend=_env_choice(
+            "ENTERPRISE_VECTOR_BACKEND", "faiss", ("faiss", "qdrant")
+        ),
+        # ":memory:" runs Qdrant inside the process — used by the tests so the
+        # suite needs no server; real deployments point at one.
+        qdrant_url=os.environ.get("ENTERPRISE_QDRANT_URL", "http://127.0.0.1:6333"),
+        qdrant_api_key=os.environ.get("ENTERPRISE_QDRANT_API_KEY", ""),
     )

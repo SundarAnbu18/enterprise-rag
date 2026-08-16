@@ -23,8 +23,9 @@ from typing import Dict, List, Optional, Sequence, Tuple
 from .config import Settings, get_settings
 from .history import recent_messages, record_turn
 from .providers import ChatProvider, build_provider
-from .store import SearchResult, VectorStore
+from .store import SearchResult
 from .tenants import Tenant, TenantStore, get_tenant_store
+from .vectordb import index_stamp_path, load_store
 
 SYSTEM_TEMPLATE = """You are the assistant for {tenant_name}, answering questions about the
 documents excerpted below.
@@ -101,7 +102,7 @@ class TenantPipeline:
         self,
         tenant: Tenant,
         provider: ChatProvider,
-        store: VectorStore,
+        store,  # anything with .search(query, k) and __len__ — see vectordb.py
         settings: Optional[Settings] = None,
     ) -> None:
         self.tenant = tenant
@@ -173,7 +174,9 @@ _PIPELINES_LOCK = threading.Lock()
 
 def _mtimes(tenant: Tenant) -> Tuple[float, float]:
     try:
-        index_mtime = tenant.index_path.stat().st_mtime
+        # For FAISS this is index.faiss itself; for Qdrant it is the stamp
+        # file every rebuild rewrites — either way, a reindex moves the mtime.
+        index_mtime = index_stamp_path(tenant).stat().st_mtime
     except OSError:
         index_mtime = 0.0
     try:
@@ -199,7 +202,7 @@ def get_pipeline(tenant: Tenant, tenant_store: Optional[TenantStore] = None) -> 
         tenant.model,
         tenant.max_tokens,
     )
-    store = VectorStore.load(tenant.index_path, tenant.chunks_path)
+    store = load_store(tenant)
     pipeline = TenantPipeline(tenant, provider, store)
 
     with _PIPELINES_LOCK:

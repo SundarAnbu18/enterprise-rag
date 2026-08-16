@@ -1,0 +1,9 @@
+{
+  "collection": "erag-acme-corp",
+  "vectors": 4,
+  "sources": {
+    "handbook.md": 4
+  },
+  "embedding_model": "all-MiniLM-L6-v2",
+  "built_at": "2026-08-15T21:20:55+00:00"
+}

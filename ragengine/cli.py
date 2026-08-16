@@ -25,6 +25,7 @@ from .exceptions import RagError
 from .indexing import build_index, save_document
 from .pipeline import get_pipeline
 from .tenants import PROVIDERS, get_tenant_store
+from .vectordb import index_location, index_stamp_path
 
 
 def _require_tenant(args: argparse.Namespace):
@@ -52,7 +53,7 @@ def _cmd_list_tenants(args: argparse.Namespace) -> int:
         print("No tenants yet.")
         return 0
     for tenant in tenants:
-        ready = "ready" if tenant.index_path.is_file() else "no index"
+        ready = "ready" if index_stamp_path(tenant).is_file() else "no index"
         print(f"  {tenant.slug:<24} {tenant.provider:<10} {tenant.model:<24} [{ready}]")
     return 0
 
@@ -70,7 +71,7 @@ def _cmd_build_index(args: argparse.Namespace) -> int:
     tenant = _require_tenant(args)
     print(f"Reading documents from {tenant.documents_dir}")
     store = build_index(tenant)
-    print(f"Indexed {len(store)} chunks -> {tenant.index_path}")
+    print(f"Indexed {len(store)} chunks -> {index_location(tenant)}")
     return 0
 
 

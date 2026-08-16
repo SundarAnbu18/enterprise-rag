@@ -109,6 +109,10 @@ class Tenant:
 
     def public_dict(self) -> dict:
         """What API responses may reveal — never the key hash."""
+        # Imported here so the registry stays importable on its own; vectordb
+        # refers back to Tenant in its type hints.
+        from .vectordb import index_stamp_path
+
         return {
             "slug": self.slug,
             "name": self.name,
@@ -118,7 +122,7 @@ class Tenant:
             "max_tokens": self.max_tokens,
             "chat_enabled": self.chat_enabled,
             "created_at": self.created_at,
-            "index_ready": self.index_path.is_file() and self.chunks_path.is_file(),
+            "index_ready": index_stamp_path(self).is_file(),
         }
 
 

@@ -33,7 +33,9 @@ from ragengine import (
     build_index,
     get_settings,
     get_tenant_store,
+    index_info,
     is_valid_conversation_id,
+    iter_document_paths,
     save_document,
 )
 
@@ -64,6 +66,15 @@ def _json_body(request: HttpRequest):
 # ---------------------------------------------------------------------------
 
 
+def _tenant_summary(tenant: Tenant) -> dict:
+    """One tenant as the console sees it: public config plus vector counts."""
+    info = index_info(tenant)
+    body = tenant.public_dict()
+    body["vectors"] = info["vectors"] if info else 0
+    body["chat_url"] = f"/chat/{tenant.slug}/"
+    return body
+
+
 @csrf_exempt
 @require_admin
 def tenants(request: HttpRequest) -> JsonResponse:
@@ -71,7 +82,12 @@ def tenants(request: HttpRequest) -> JsonResponse:
     store = get_tenant_store()
 
     if request.method == "GET":
-        return JsonResponse({"tenants": [t.public_dict() for t in store.list()]})
+        return JsonResponse(
+            {
+                "tenants": [_tenant_summary(t) for t in store.list()],
+                "backend": get_settings().vector_backend,
+            }
+        )
 
     if request.method != "POST":
         return JsonResponse({"error": "method not allowed"}, status=405)
@@ -87,6 +103,7 @@ def tenants(request: HttpRequest) -> JsonResponse:
             provider_api_key=str(payload.get("provider_api_key", "")),
             model=payload.get("model"),
             slug=payload.get("slug"),
+            chat_enabled=bool(payload.get("chat_enabled", True)),
         )
     except TenantExistsError as exc:
         return JsonResponse({"error": str(exc)}, status=409)
@@ -98,6 +115,65 @@ def tenants(request: HttpRequest) -> JsonResponse:
     body["api_key"] = api_key
     body["chat_url"] = f"/chat/{tenant.slug}/"
     return JsonResponse(body, status=201)
+
+
+@csrf_exempt
+@require_admin
+def tenant_detail(request: HttpRequest, slug: str) -> JsonResponse:
+    """Everything the console shows for one client: config, documents, vectors."""
+    if request.method != "GET":
+        return JsonResponse({"error": "method not allowed"}, status=405)
+    try:
+        tenant = get_tenant_store().get(slug)
+    except TenantNotFoundError as exc:
+        return JsonResponse({"error": str(exc)}, status=404)
+
+    info = index_info(tenant)
+    sources = info["sources"] if info else {}
+    documents = [
+        {
+            "name": path.name,
+            "bytes": path.stat().st_size,
+            "chunks": sources.get(path.name, 0),
+        }
+        for path in iter_document_paths(tenant.documents_dir)
+    ]
+
+    body = _tenant_summary(tenant)
+    body["documents"] = documents
+    body["backend"] = get_settings().vector_backend
+    return JsonResponse(body)
+
+
+@csrf_exempt
+@require_POST
+@require_admin
+def admin_upload_document(request: HttpRequest, slug: str) -> JsonResponse:
+    """The operator adds a document to any tenant's corpus from the console.
+
+    Same behaviour as the tenant's own /api/v1/documents/ — validate, store,
+    reindex synchronously — just authenticated with the operator key instead
+    of a tenant key the operator no longer has.
+    """
+    try:
+        tenant = get_tenant_store().get(slug)
+    except TenantNotFoundError as exc:
+        return JsonResponse({"error": str(exc)}, status=404)
+
+    payload, error = _json_body(request)
+    if error:
+        return error
+
+    try:
+        save_document(tenant, str(payload.get("filename", "")), str(payload.get("text", "")))
+        store = build_index(tenant)
+    except (ConfigurationError, NoDocumentsError) as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+    except RagError:
+        logger.exception("Reindex failed for tenant %s", tenant.slug)
+        return JsonResponse({"error": UNAVAILABLE_ERROR}, status=503)
+
+    return JsonResponse({"status": "indexed", "chunks": len(store)}, status=201)
 
 
 # ---------------------------------------------------------------------------
@@ -238,6 +314,18 @@ def chat(request: HttpRequest, slug: str) -> HttpResponse:
         return _answer_response(tenant, question, conversation_id)
 
     return render(request, "ragapi/chat.html", {"tenant": tenant})
+
+
+@require_GET
+def console(request: HttpRequest) -> HttpResponse:
+    """The operator console at /console/.
+
+    The page itself is an empty shell — every piece of data on it comes from
+    the admin API, which demands ``X-Admin-Key`` on each request. Serving the
+    shell without auth therefore leaks nothing, and the key never has to live
+    anywhere but the operator's browser session.
+    """
+    return render(request, "ragapi/console.html")
 
 
 @require_GET

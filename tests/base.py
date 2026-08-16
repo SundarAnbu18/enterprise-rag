@@ -22,6 +22,7 @@ from ragengine.config import get_settings
 from ragengine.embeddings import get_embedder
 from ragengine.pipeline import clear_pipelines
 from ragengine.providers.base import ChatProvider, Completion
+from ragengine.vectordb import get_qdrant_client
 
 ADMIN_KEY = "test-admin-key"
 
@@ -31,6 +32,9 @@ _ENV_KEYS = (
     "ENTERPRISE_SECRET_KEY",
     "ENTERPRISE_HISTORY_DB",
     "ENTERPRISE_HISTORY_TURNS",
+    "ENTERPRISE_VECTOR_BACKEND",
+    "ENTERPRISE_QDRANT_URL",
+    "ENTERPRISE_QDRANT_API_KEY",
 )
 
 
@@ -93,9 +97,16 @@ class EngineTestCase(SimpleTestCase):
         self.var_dir = tempfile.mkdtemp(prefix="erag-test-")
         os.environ["ENTERPRISE_VAR_DIR"] = self.var_dir
         os.environ["ENTERPRISE_ADMIN_API_KEY"] = ADMIN_KEY
-        os.environ.pop("ENTERPRISE_SECRET_KEY", None)
-        os.environ.pop("ENTERPRISE_HISTORY_DB", None)
-        os.environ.pop("ENTERPRISE_HISTORY_TURNS", None)
+        # Assigned empty rather than popped: load_dotenv() only fills keys
+        # *missing* from the environment, so an empty value is what keeps a
+        # developer's real .env from leaking into the suite. Empty reads as
+        # unset everywhere in config.py.
+        os.environ["ENTERPRISE_SECRET_KEY"] = ""
+        os.environ["ENTERPRISE_HISTORY_DB"] = ""
+        os.environ["ENTERPRISE_HISTORY_TURNS"] = ""
+        os.environ["ENTERPRISE_VECTOR_BACKEND"] = ""
+        os.environ["ENTERPRISE_QDRANT_URL"] = ""
+        os.environ["ENTERPRISE_QDRANT_API_KEY"] = ""
         self._reset_caches()
 
         # History's in-memory fallback is module state; start each test clean.
@@ -117,4 +128,5 @@ class EngineTestCase(SimpleTestCase):
     def _reset_caches() -> None:
         get_settings.cache_clear()
         get_embedder.cache_clear()
+        get_qdrant_client.cache_clear()
         clear_pipelines()

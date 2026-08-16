@@ -15,8 +15,8 @@ from typing import List, Optional
 
 from .chunking import Chunk, chunk_document
 from .exceptions import ConfigurationError, NoDocumentsError
-from .store import VectorStore
 from .tenants import Tenant
+from .vectordb import save_index
 
 DOCUMENT_SUFFIXES = (".txt", ".md")
 
@@ -87,9 +87,11 @@ def delete_document(tenant: Tenant, filename: str) -> bool:
     return True
 
 
-def build_index(tenant: Tenant, embedder=None) -> VectorStore:
-    """Chunk, embed and persist the tenant's corpus. Returns the store it wrote."""
+def build_index(tenant: Tenant, embedder=None):
+    """Chunk, embed and persist the tenant's corpus. Returns the store it wrote.
+
+    Where the vectors land — FAISS files or a Qdrant collection — is the
+    deployment's choice; see ``vectordb.py``.
+    """
     chunks = load_chunks(tenant)
-    store = VectorStore.build(chunks, embedder=embedder)
-    store.save(tenant.index_path, tenant.chunks_path)
-    return store
+    return save_index(tenant, chunks, embedder=embedder)

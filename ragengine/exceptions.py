@@ -28,7 +28,11 @@ class AuthenticationError(RagError):
 
 
 class IndexNotBuiltError(RagError):
-    """The tenant's FAISS index has not been built yet."""
+    """The tenant's vector index has not been built yet."""
+
+
+class VectorDBError(RagError):
+    """The configured vector database is unreachable, missing or misconfigured."""
 
 
 class NoDocumentsError(RagError):

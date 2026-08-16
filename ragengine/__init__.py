@@ -26,13 +26,15 @@ from .exceptions import (
     TenantExistsError,
     TenantNotFoundError,
     UnknownProviderError,
+    VectorDBError,
 )
 from .history import forget, is_valid_conversation_id
-from .indexing import build_index, delete_document, load_chunks, save_document
+from .indexing import build_index, delete_document, iter_document_paths, load_chunks, save_document
 from .pipeline import Answer, TenantPipeline, answer_question, clear_pipelines, get_pipeline
 from .providers import Completion, build_provider
 from .store import SearchResult, VectorStore
 from .tenants import DEFAULT_MODELS, PROVIDERS, Tenant, TenantStore, get_tenant_store, slugify
+from .vectordb import index_info, index_stamp_path, load_store, save_index
 
 __all__ = [
     "Answer",
@@ -55,6 +57,7 @@ __all__ = [
     "TenantPipeline",
     "TenantStore",
     "UnknownProviderError",
+    "VectorDBError",
     "VectorStore",
     "answer_question",
     "build_index",
@@ -66,9 +69,14 @@ __all__ = [
     "get_pipeline",
     "get_settings",
     "get_tenant_store",
+    "index_info",
+    "index_stamp_path",
     "is_valid_conversation_id",
+    "iter_document_paths",
     "load_chunks",
+    "load_store",
     "save_document",
+    "save_index",
     "slugify",
     "split_paragraphs",
 ]
