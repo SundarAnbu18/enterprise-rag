@@ -34,7 +34,7 @@ from .pipeline import Answer, TenantPipeline, answer_question, clear_pipelines, 
 from .providers import Completion, build_provider
 from .store import SearchResult, VectorStore
 from .tenants import DEFAULT_MODELS, PROVIDERS, Tenant, TenantStore, get_tenant_store, slugify
-from .vectordb import index_info, index_stamp_path, load_store, save_index
+from .vectordb import index_info, index_stamp_path, live_vector_counts, load_store, save_index
 
 __all__ = [
     "Answer",
@@ -73,6 +73,7 @@ __all__ = [
     "index_stamp_path",
     "is_valid_conversation_id",
     "iter_document_paths",
+    "live_vector_counts",
     "load_chunks",
     "load_store",
     "save_document",

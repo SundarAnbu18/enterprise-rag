@@ -36,6 +36,7 @@ from ragengine import (
     index_info,
     is_valid_conversation_id,
     iter_document_paths,
+    live_vector_counts,
     save_document,
 )
 
@@ -82,12 +83,28 @@ def tenants(request: HttpRequest) -> JsonResponse:
     store = get_tenant_store()
 
     if request.method == "GET":
-        return JsonResponse(
-            {
-                "tenants": [_tenant_summary(t) for t in store.list()],
-                "backend": get_settings().vector_backend,
-            }
-        )
+        backend = get_settings().vector_backend
+        body = {
+            "tenants": [_tenant_summary(t) for t in store.list()],
+            "backend": backend,
+        }
+        if backend == "qdrant":
+            # Ask the connected cluster what it actually holds, so the console
+            # can flag tenants whose vectors are not there (yet). The listing
+            # must survive a down cluster — local records still render.
+            try:
+                counts = live_vector_counts()
+            except RagError as exc:
+                logger.warning("Qdrant live check failed while listing: %s", exc)
+                body["backend_status"] = "unreachable"
+            else:
+                body["backend_status"] = "connected"
+                for item in body["tenants"]:
+                    item["in_backend"] = item["slug"] in counts
+                    item["live_vectors"] = counts.get(item["slug"], 0)
+        else:
+            body["backend_status"] = "local"
+        return JsonResponse(body)
 
     if request.method != "POST":
         return JsonResponse({"error": "method not allowed"}, status=405)

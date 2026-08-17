@@ -44,9 +44,11 @@ class TenantListVectorsTests(ConsoleApiTestCase):
         response = self.admin_get("/api/v1/tenants/")
         body = response.json()
         self.assertEqual(body["backend"], "faiss")
+        self.assertEqual(body["backend_status"], "local")
         self.assertEqual(body["tenants"][0]["vectors"], 2)
         self.assertEqual(body["tenants"][0]["chat_url"], "/chat/acme-corp/")
         self.assertTrue(body["tenants"][0]["index_ready"])
+        self.assertNotIn("in_backend", body["tenants"][0])
 
 
 class TenantDetailTests(ConsoleApiTestCase):

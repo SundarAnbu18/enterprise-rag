@@ -239,6 +239,27 @@ def load_store(tenant: "Tenant"):
     return QdrantVectorStore(client, name, count)
 
 
+def live_vector_counts() -> dict:
+    """slug -> exact point count, straight from the live Qdrant server.
+
+    The stamp files say what *was* built; this says what is *there now*. The
+    console listing shows both so a tenant whose collection is missing from
+    the connected cluster (fresh cluster, changed URL, wiped volume) is
+    visible at a glance instead of failing at question time. One request for
+    the names plus one per collection — fine at operator-console scale.
+    """
+    client = get_qdrant_client()
+    try:
+        names = [c.name for c in client.get_collections().collections]
+        return {
+            name[len("erag-") :]: client.count(name, exact=True).count
+            for name in names
+            if name.startswith("erag-")
+        }
+    except Exception as exc:
+        raise VectorDBError(_unreachable(exc)) from exc
+
+
 def index_info(tenant: "Tenant") -> Optional[dict]:
     """Vector and per-document chunk counts without loading any vectors.
 

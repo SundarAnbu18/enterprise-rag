@@ -111,10 +111,11 @@
           <button id="new-btn">New client</button>
         </div>
       </div>
+      <div id="backend-warning" class="error hidden"></div>
       <div class="card" style="padding:6px 12px">
         <table>
           <thead>
-            <tr><th>Client</th><th>Platform</th><th>Model</th><th>Vectors</th><th>Index</th><th>Chat</th></tr>
+            <tr><th>Client</th><th>Platform</th><th>Model</th><th>Vectors</th><th>Index</th><th id="live-th" class="hidden">In Qdrant</th><th>Chat</th></tr>
           </thead>
           <tbody id="client-rows"></tbody>
         </table>
@@ -277,7 +278,7 @@
         sessionStorage.setItem("eragAdminKey", key);
         backend = data.backend || "faiss";
         $("backend-badge").textContent = "vector backend: " + backend;
-        renderClients(data.tenants);
+        renderClients(data);
         show("dash");
       }
       $("connect-btn").addEventListener("click", async () => {
@@ -304,7 +305,17 @@
       });
 
       // ---- client list ------------------------------------------------------
-      function renderClients(tenants) {
+      function renderClients(data) {
+        const tenants = data.tenants;
+        const live = data.backend === "qdrant" && data.backend_status === "connected";
+        $("live-th").classList.toggle("hidden", !live);
+        const warning = $("backend-warning");
+        warning.classList.toggle("hidden", data.backend_status !== "unreachable");
+        if (data.backend_status === "unreachable") {
+          warning.textContent =
+            "The Qdrant cluster is unreachable — showing local records only. " +
+            "Check the server and ENTERPRISE_QDRANT_URL, then Refresh.";
+        }
         const rows = $("client-rows");
         rows.textContent = "";
         $("empty-note").classList.toggle("hidden", tenants.length > 0);
@@ -324,6 +335,16 @@
           chip.textContent = t.index_ready ? "ready" : "no index";
           status.appendChild(chip);
           tr.appendChild(status);
+          if (live) {
+            const cell = document.createElement("td");
+            const liveChip = document.createElement("span");
+            liveChip.className = "chip " + (t.in_backend ? "ok" : "warn");
+            liveChip.textContent = t.in_backend
+              ? "in qdrant (" + t.live_vectors + ")"
+              : "not in qdrant";
+            cell.appendChild(liveChip);
+            tr.appendChild(cell);
+          }
           const chat = document.createElement("td");
           if (t.chat_enabled) {
             const a = document.createElement("a");
@@ -344,7 +365,7 @@
         setError("dash-error", "");
         try {
           const data = await api("/api/v1/tenants/");
-          renderClients(data.tenants);
+          renderClients(data);
         } catch (err) { setError("dash-error", err.message); }
       }
       $("refresh-btn").addEventListener("click", refresh);

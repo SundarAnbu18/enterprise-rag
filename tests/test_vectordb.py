@@ -22,6 +22,7 @@ from ragengine.vectordb import (
     get_qdrant_client,
     index_info,
     index_stamp_path,
+    live_vector_counts,
     load_store,
 )
 
@@ -116,6 +117,44 @@ class QdrantBackendTests(QdrantTestCase):
         self._build()
         self._build()
         self.assertEqual(len(load_store(self.tenant)), 2)
+
+    def test_live_counts_track_the_cluster_not_the_stamps(self):
+        self.assertEqual(live_vector_counts(), {})
+        self._build()
+        self.assertEqual(live_vector_counts(), {"acme": 2})
+
+    def test_listing_endpoint_flags_missing_and_present_collections(self):
+        from .base import ADMIN_KEY
+
+        self._build()
+        # A second tenant that exists locally but was never indexed here.
+        get_tenant_store().create("Ghost Co", "anthropic", "k")
+        response = self.client.get("/api/v1/tenants/", HTTP_X_ADMIN_KEY=ADMIN_KEY)
+        body = response.json()
+        self.assertEqual(body["backend_status"], "connected")
+        by_slug = {t["slug"]: t for t in body["tenants"]}
+        self.assertTrue(by_slug["acme"]["in_backend"])
+        self.assertEqual(by_slug["acme"]["live_vectors"], 2)
+        self.assertFalse(by_slug["ghost-co"]["in_backend"])
+        self.assertEqual(by_slug["ghost-co"]["live_vectors"], 0)
+
+    def test_listing_survives_an_unreachable_cluster(self):
+        from unittest.mock import patch
+
+        from ragengine.exceptions import VectorDBError
+
+        from .base import ADMIN_KEY
+
+        self._build()
+        with patch(
+            "ragapi.views.live_vector_counts", side_effect=VectorDBError("down")
+        ):
+            response = self.client.get("/api/v1/tenants/", HTTP_X_ADMIN_KEY=ADMIN_KEY)
+        body = response.json()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(body["backend_status"], "unreachable")
+        self.assertEqual(len(body["tenants"]), 1)
+        self.assertNotIn("in_backend", body["tenants"][0])
 
     def test_missing_package_reads_as_instructions_not_traceback(self):
         # Simulated by asking for a client while hiding the import.
