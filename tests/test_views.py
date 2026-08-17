@@ -168,6 +168,14 @@ class ChatPageTests(TenantApiTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Acme Corp")
 
+    def test_page_is_embeddable_in_an_iframe(self):
+        # The chat page is the widget tenants embed; everything else keeps
+        # the X-Frame-Options: DENY clickjacking default.
+        chat_page = self.client.get("/chat/acme-corp/")
+        console = self.client.get("/console/")
+        self.assertNotIn("X-Frame-Options", chat_page.headers)
+        self.assertEqual(console.headers.get("X-Frame-Options"), "DENY")
+
     def test_unknown_workspace_is_404(self):
         self.assertEqual(self.client.get("/chat/nobody/").status_code, 404)
 

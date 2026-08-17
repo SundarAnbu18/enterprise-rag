@@ -17,6 +17,7 @@ import logging
 
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import render
+from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
@@ -306,6 +307,7 @@ def ask(request: HttpRequest, tenant: Tenant) -> JsonResponse:
 # ---------------------------------------------------------------------------
 
 
+@xframe_options_exempt
 def chat(request: HttpRequest, slug: str) -> HttpResponse:
     """A ready-made chat page for one tenant at /chat/<slug>/.
 
@@ -313,6 +315,12 @@ def chat(request: HttpRequest, slug: str) -> HttpResponse:
     keep the thread on screen. It is open to anyone who has the URL when the
     tenant's ``chat_enabled`` flag is on; a tenant who wants it private turns
     the flag off and calls /api/v1/ask/ with their key instead.
+
+    Frame-exempt on purpose: this page is the embeddable widget — tenants
+    iframe it into their own sites. It contains no secrets (no keys, no
+    operator data), and its POST is still CSRF-protected; embedding cross-site
+    additionally needs the ``DJANGO_EMBED_CHAT`` cookie settings (see
+    web/settings.py).
     """
     try:
         tenant = get_tenant_store().get(slug)
@@ -331,6 +339,22 @@ def chat(request: HttpRequest, slug: str) -> HttpResponse:
         return _answer_response(tenant, question, conversation_id)
 
     return render(request, "ragapi/chat.html", {"tenant": tenant})
+
+
+@require_GET
+def widget_js(request: HttpRequest) -> HttpResponse:
+    """The embeddable chat-widget loader at /widget.js.
+
+    One static, cacheable script for every tenant: the tenant slug rides on
+    the script tag's ``data-tenant`` attribute and the server origin is read
+    from the tag's ``src``, so the one-liner the console hands out keeps
+    working across domain moves and never embeds a key.
+    """
+    response = render(
+        request, "ragapi/widget.js", content_type="application/javascript; charset=utf-8"
+    )
+    response["Cache-Control"] = "public, max-age=3600"
+    return response
 
 
 @require_GET

@@ -6,6 +6,12 @@
       "runtimeExecutable": "../.venv/bin/python",
       "runtimeArgs": ["manage.py", "runserver", "8000"],
       "port": 8000
+    },
+    {
+      "name": "client-site",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "8080", "--directory", "/private/tmp/claude-501/-Users-sundaranbu-Desktop-Sundar-genai-course-enterprise-rag/82692eba-9c95-4db1-a34c-868ae8cdfe15/scratchpad/clientsite"],
+      "port": 8080
     }
   ]
 }

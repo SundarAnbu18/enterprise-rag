@@ -155,6 +155,11 @@
           <pre class="snippet" id="d-snippet"></pre>
           <button data-copy="d-snippet">Copy</button>
         </div>
+        <p class="hint">Website chatbot widget — paste before <code>&lt;/body&gt;</code> on the client's site:</p>
+        <div class="snippet-wrap">
+          <pre class="snippet" id="d-widget"></pre>
+          <button data-copy="d-widget">Copy</button>
+        </div>
       </div>
     </section>
 
@@ -223,6 +228,13 @@
         <div class="snippet-wrap">
           <pre class="snippet" id="c-js"></pre>
           <button data-copy="c-js">Copy</button>
+        </div>
+
+        <h3>Website chatbot widget</h3>
+        <p class="hint">One line. Paste it before <code>&lt;/body&gt;</code> on the client's website and the site gets a floating chatbot answering from this knowledge base.</p>
+        <div class="snippet-wrap">
+          <pre class="snippet" id="c-widget"></pre>
+          <button data-copy="c-widget">Copy</button>
         </div>
         <div style="margin-top:8px"><button id="created-done">Done — back to clients</button></div>
       </div>
@@ -371,6 +383,10 @@
       $("refresh-btn").addEventListener("click", refresh);
       $("new-btn").addEventListener("click", () => { resetNewForm(); show("new"); });
 
+      function widgetSnippet(slug) {
+        return '<script src="' + location.origin + '/widget.js" data-tenant="' + slug + '" async><\/script>';
+      }
+
       // ---- detail -----------------------------------------------------------
       let currentSlug = null;
       async function openDetail(slug) {
@@ -409,6 +425,7 @@
             "ERAG_ASK_URL=" + location.origin + "/api/v1/ask/",
             "ERAG_API_KEY=erag." + t.slug + ".<the key shown at creation>",
           ].join("\n");
+          $("d-widget").textContent = widgetSnippet(t.slug);
           show("detail");
         } catch (err) { setError("dash-error", err.message); }
       }
@@ -546,6 +563,7 @@
           "});",
           "const { answer, sources } = await res.json();",
         ].join("\n");
+        $("c-widget").textContent = widgetSnippet(created.slug);
       }
       $("created-done").addEventListener("click", () => { show("dash"); refresh(); });
 

@@ -18,4 +18,5 @@ urlpatterns = [
     path("api/v1/health/", views.health, name="health"),
     path("chat/<slug:slug>/", views.chat, name="chat"),
     path("console/", views.console, name="console"),
+    path("widget.js", views.widget_js, name="widget_js"),
 ]

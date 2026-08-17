@@ -123,6 +123,17 @@ class ChatEnabledAtCreationTests(EngineTestCase):
         self.assertEqual(self.client.get("/chat/quiet-co/").status_code, 403)
 
 
+class WidgetLoaderTests(EngineTestCase):
+    def test_widget_js_is_public_javascript_and_cacheable(self):
+        response = self.client.get("/widget.js")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["Content-Type"], "application/javascript; charset=utf-8")
+        self.assertIn("public", response.headers.get("Cache-Control", ""))
+        body = response.content.decode()
+        self.assertIn("data-tenant", body)
+        self.assertIn("/chat/", body)
+
+
 class ConsolePageTests(EngineTestCase):
     def test_console_shell_is_served_without_auth(self):
         response = self.client.get("/console/")

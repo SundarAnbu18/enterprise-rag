@@ -85,6 +85,14 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 CORS_ALLOWED_ORIGINS = _env_list("CORS_ALLOWED_ORIGINS")
 CORS_ALLOW_HEADERS = [*default_headers, "x-api-key", "x-admin-key"]
 
+# Set DJANGO_EMBED_CHAT=True (HTTPS deployments only) when tenant sites iframe
+# the chat page. Inside a cross-site iframe the browser only sends the CSRF
+# cookie if it is SameSite=None + Secure; without this flag the embedded
+# widget renders but every POST fails the CSRF check.
+if _env_flag("DJANGO_EMBED_CHAT", "False"):
+    CSRF_COOKIE_SAMESITE = "None"
+    CSRF_COOKIE_SECURE = True
+
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
