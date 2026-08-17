@@ -84,6 +84,11 @@ class Settings:
     vector_backend: str
     qdrant_url: str
     qdrant_api_key: str
+    smtp_host: str
+    smtp_port: int
+    smtp_user: str
+    smtp_password: str
+    smtp_from: str
 
     @property
     def tenants_dir(self) -> Path:
@@ -132,4 +137,12 @@ def get_settings() -> Settings:
         # suite needs no server; real deployments point at one.
         qdrant_url=os.environ.get("ENTERPRISE_QDRANT_URL", "http://127.0.0.1:6333"),
         qdrant_api_key=os.environ.get("ENTERPRISE_QDRANT_API_KEY", ""),
+        # Outbound mail for support escalations. Empty host disables email —
+        # escalations are still recorded on disk either way (escalation.py).
+        smtp_host=os.environ.get("ENTERPRISE_SMTP_HOST", ""),
+        smtp_port=_env_int("ENTERPRISE_SMTP_PORT", 587),
+        smtp_user=os.environ.get("ENTERPRISE_SMTP_USER", ""),
+        smtp_password=os.environ.get("ENTERPRISE_SMTP_PASSWORD", ""),
+        smtp_from=os.environ.get("ENTERPRISE_SMTP_FROM", "")
+        or os.environ.get("ENTERPRISE_SMTP_USER", ""),
     )

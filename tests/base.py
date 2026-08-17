@@ -35,6 +35,11 @@ _ENV_KEYS = (
     "ENTERPRISE_VECTOR_BACKEND",
     "ENTERPRISE_QDRANT_URL",
     "ENTERPRISE_QDRANT_API_KEY",
+    "ENTERPRISE_SMTP_HOST",
+    "ENTERPRISE_SMTP_PORT",
+    "ENTERPRISE_SMTP_USER",
+    "ENTERPRISE_SMTP_PASSWORD",
+    "ENTERPRISE_SMTP_FROM",
 )
 
 
@@ -107,6 +112,11 @@ class EngineTestCase(SimpleTestCase):
         os.environ["ENTERPRISE_VECTOR_BACKEND"] = ""
         os.environ["ENTERPRISE_QDRANT_URL"] = ""
         os.environ["ENTERPRISE_QDRANT_API_KEY"] = ""
+        os.environ["ENTERPRISE_SMTP_HOST"] = ""
+        os.environ["ENTERPRISE_SMTP_PORT"] = ""
+        os.environ["ENTERPRISE_SMTP_USER"] = ""
+        os.environ["ENTERPRISE_SMTP_PASSWORD"] = ""
+        os.environ["ENTERPRISE_SMTP_FROM"] = ""
         self._reset_caches()
 
         # History's in-memory fallback is module state; start each test clean.

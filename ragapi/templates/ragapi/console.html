@@ -136,6 +136,7 @@
           <div><label>Platform · model</label><div id="d-platform"></div></div>
           <div><label>Vectors in index</label><div id="d-vectors"></div></div>
           <div><label>Hosted chat</label><div id="d-chat"></div></div>
+          <div><label>Support email</label><div id="d-support"></div></div>
         </div>
         <h3>Documents</h3>
         <table>
@@ -188,6 +189,9 @@
         <label for="n-key">Client's own LLM API key</label>
         <input type="password" id="n-key" autocomplete="off" placeholder="sk-ant-… or AIza…">
         <p class="hint">Stored encrypted on the server; used only for this client's questions.</p>
+        <label for="n-support">Support email <span class="muted">(optional)</span></label>
+        <input type="text" id="n-support" placeholder="support@client.com">
+        <p class="hint">When the assistant can't answer, visitors can email this address — with their contact details and the conversation attached.</p>
         <label for="n-files">Knowledge-base documents (.md / .txt)</label>
         <input type="file" id="n-files" multiple accept=".md,.txt">
         <div class="filelist" id="n-filelist"></div>
@@ -408,6 +412,7 @@
             a.textContent = location.origin + t.chat_url;
             chat.appendChild(a);
           } else { chat.textContent = "disabled"; }
+          $("d-support").textContent = t.support_email || "none — assistant has no human fallback";
           const rows = $("doc-rows");
           rows.textContent = "";
           $("doc-empty").classList.toggle("hidden", t.documents.length > 0);
@@ -475,7 +480,7 @@
 
       // ---- new client ---------------------------------------------------------
       function resetNewForm() {
-        ["n-name", "n-model", "n-key"].forEach((id) => { $(id).value = ""; });
+        ["n-name", "n-model", "n-key", "n-support"].forEach((id) => { $(id).value = ""; });
         $("n-provider").value = "anthropic";
         $("n-files").value = "";
         $("n-chat").checked = true;
@@ -504,6 +509,7 @@
               provider_api_key: providerKey,
               model: $("n-model").value.trim() || null,
               chat_enabled: $("n-chat").checked,
+              support_email: $("n-support").value.trim() || null,
             }),
           });
           const files = Array.from($("n-files").files);

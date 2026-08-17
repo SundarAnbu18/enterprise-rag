@@ -52,6 +52,9 @@ DEFAULT_MODELS = {
 # Slugs become directory names and URL segments, so they are strictly shaped.
 SLUG_RE = re.compile(r"\A[a-z0-9][a-z0-9-]{0,62}\Z")
 
+# Deliberately loose: enough to catch typos, not to adjudicate RFC 5322.
+EMAIL_RE = re.compile(r"\A[^@\s]+@[^@\s]+\.[^@\s]+\Z")
+
 
 def slugify(name: str) -> str:
     """Turn a company name into a filesystem- and URL-safe slug."""
@@ -72,6 +75,9 @@ class Tenant:
     top_k: int
     max_tokens: int
     chat_enabled: bool = True
+    # Where unanswerable questions escalate to. Empty means the tenant has
+    # no human fallback and the chat page offers none.
+    support_email: str = ""
     created_at: str = ""
     home: Path = field(default=Path("."), compare=False)
 
@@ -104,6 +110,7 @@ class Tenant:
             "top_k": self.top_k,
             "max_tokens": self.max_tokens,
             "chat_enabled": self.chat_enabled,
+            "support_email": self.support_email,
             "created_at": self.created_at,
         }
 
@@ -121,6 +128,7 @@ class Tenant:
             "top_k": self.top_k,
             "max_tokens": self.max_tokens,
             "chat_enabled": self.chat_enabled,
+            "support_email": self.support_email,
             "created_at": self.created_at,
             "index_ready": index_stamp_path(self).is_file(),
         }
@@ -165,6 +173,7 @@ class TenantStore:
             top_k=int(data.get("top_k", self.settings.default_top_k)),
             max_tokens=int(data.get("max_tokens", self.settings.default_max_tokens)),
             chat_enabled=bool(data.get("chat_enabled", True)),
+            support_email=data.get("support_email", ""),
             created_at=data.get("created_at", ""),
             home=path.parent,
         )
@@ -220,6 +229,7 @@ class TenantStore:
         top_k: Optional[int] = None,
         max_tokens: Optional[int] = None,
         chat_enabled: bool = True,
+        support_email: Optional[str] = None,
     ) -> Tuple[Tenant, str]:
         """Onboard a customer. Returns the tenant and their API key —
         the only time the key ever exists in plaintext on our side."""
@@ -232,6 +242,9 @@ class TenantStore:
             raise ConfigurationError("provider_api_key is required")
         if not (name or "").strip():
             raise ConfigurationError("name is required")
+        support_email = (support_email or "").strip()
+        if support_email and not EMAIL_RE.match(support_email):
+            raise ConfigurationError(f"invalid support_email {support_email!r}")
 
         slug = (slug or slugify(name)).strip().lower()
         if not SLUG_RE.match(slug):
@@ -251,6 +264,7 @@ class TenantStore:
             top_k=top_k or self.settings.default_top_k,
             max_tokens=max_tokens or self.settings.default_max_tokens,
             chat_enabled=chat_enabled,
+            support_email=support_email,
             created_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
             home=home,
         )
@@ -268,12 +282,16 @@ class TenantStore:
     def update(self, slug: str, **changes) -> Tenant:
         """Change a tenant's public configuration in place."""
         tenant = self.get(slug)
-        allowed = {"name", "model", "top_k", "max_tokens", "chat_enabled", "provider"}
+        allowed = {
+            "name", "model", "top_k", "max_tokens", "chat_enabled", "provider", "support_email"
+        }
         unknown = set(changes) - allowed
         if unknown:
             raise ConfigurationError(f"cannot update field(s): {', '.join(sorted(unknown))}")
         if "provider" in changes and changes["provider"] not in PROVIDERS:
             raise ConfigurationError(f"provider must be one of {', '.join(PROVIDERS)}")
+        if changes.get("support_email") and not EMAIL_RE.match(changes["support_email"]):
+            raise ConfigurationError(f"invalid support_email {changes['support_email']!r}")
         updated = replace(tenant, **changes)
         self._write_json(self._tenant_file(slug), updated.to_dict())
         self._cache.pop(slug, None)

@@ -32,14 +32,19 @@ from ragengine import (
     TenantNotFoundError,
     answer_question,
     build_index,
+    can_email,
     get_settings,
     get_tenant_store,
     index_info,
     is_valid_conversation_id,
     iter_document_paths,
     live_vector_counts,
+    record_escalation,
     save_document,
+    send_escalation_email,
 )
+from ragengine.history import recent_messages
+from ragengine.tenants import EMAIL_RE
 
 from .auth import require_admin, require_tenant
 
@@ -122,6 +127,7 @@ def tenants(request: HttpRequest) -> JsonResponse:
             model=payload.get("model"),
             slug=payload.get("slug"),
             chat_enabled=bool(payload.get("chat_enabled", True)),
+            support_email=payload.get("support_email"),
         )
     except TenantExistsError as exc:
         return JsonResponse({"error": str(exc)}, status=409)
@@ -338,7 +344,68 @@ def chat(request: HttpRequest, slug: str) -> HttpResponse:
             return error
         return _answer_response(tenant, question, conversation_id)
 
-    return render(request, "ragapi/chat.html", {"tenant": tenant})
+    return render(
+        request,
+        "ragapi/chat.html",
+        {"tenant": tenant, "support_enabled": bool(tenant.support_email)},
+    )
+
+
+MAX_NAME_LENGTH = 80
+MAX_EMAIL_LENGTH = 254
+
+
+@require_POST
+def chat_escalate(request: HttpRequest, slug: str) -> JsonResponse:
+    """The chat page's "email a human" fallback, POSTed same-origin.
+
+    Validation mirrors the rest of the boundary: everything is length-capped
+    and shape-checked before it touches the filesystem. The escalation is
+    always recorded to the tenant's ``escalations.jsonl``; the email on top is
+    best-effort — a down mail server must not turn into a visitor-facing
+    failure, because the request is already safely on disk.
+    """
+    try:
+        tenant = get_tenant_store().get(slug)
+    except TenantNotFoundError:
+        return JsonResponse({"error": "No such workspace."}, status=404)
+    if not tenant.chat_enabled:
+        return JsonResponse({"error": "Chat is disabled for this workspace."}, status=403)
+    if not tenant.support_email:
+        return JsonResponse({"error": "This workspace has no support contact."}, status=400)
+
+    payload, error = _json_body(request)
+    if error:
+        return error
+
+    name = str(payload.get("name", "")).strip()
+    email = str(payload.get("email", "")).strip()
+    question = str(payload.get("question", "")).strip()
+    if not name or len(name) > MAX_NAME_LENGTH:
+        return JsonResponse({"error": "'name' is required (80 characters max)"}, status=400)
+    if len(email) > MAX_EMAIL_LENGTH or not EMAIL_RE.match(email):
+        return JsonResponse({"error": "a valid 'email' is required"}, status=400)
+    if not question or len(question) > MAX_QUESTION_LENGTH:
+        return JsonResponse(
+            {"error": f"'question' is required ({MAX_QUESTION_LENGTH} characters max)"},
+            status=400,
+        )
+
+    conversation_id = str(payload.get("conversation_id") or "").strip()
+    transcript = []
+    if conversation_id and is_valid_conversation_id(conversation_id):
+        transcript = recent_messages(tenant.slug, conversation_id, get_settings())
+
+    record_escalation(tenant, name, email, question, transcript)
+
+    emailed = False
+    if can_email(tenant):
+        try:
+            emailed = send_escalation_email(tenant, name, email, question, transcript)
+        except Exception:
+            logger.exception("Escalation email failed for tenant %s", tenant.slug)
+
+    return JsonResponse({"status": "emailed" if emailed else "recorded"})
 
 
 @require_GET

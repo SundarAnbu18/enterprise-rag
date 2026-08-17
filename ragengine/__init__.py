@@ -28,6 +28,7 @@ from .exceptions import (
     UnknownProviderError,
     VectorDBError,
 )
+from .escalation import can_email, record_escalation, send_escalation_email
 from .history import forget, is_valid_conversation_id
 from .indexing import build_index, delete_document, iter_document_paths, load_chunks, save_document
 from .pipeline import Answer, TenantPipeline, answer_question, clear_pipelines, get_pipeline
@@ -62,6 +63,7 @@ __all__ = [
     "answer_question",
     "build_index",
     "build_provider",
+    "can_email",
     "chunk_document",
     "clear_pipelines",
     "delete_document",
@@ -76,7 +78,9 @@ __all__ = [
     "live_vector_counts",
     "load_chunks",
     "load_store",
+    "record_escalation",
     "save_document",
+    "send_escalation_email",
     "save_index",
     "slugify",
     "split_paragraphs",

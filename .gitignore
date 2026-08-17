@@ -1,0 +1,7 @@
+.env
+var/
+__pycache__/
+*.pyc
+staticfiles/
+.claude/
+.venv/

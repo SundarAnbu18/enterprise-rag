@@ -20,10 +20,6 @@
       padding: 14px 20px; display: flex; align-items: baseline; gap: 10px;
     }
     header h1 { font-size: 17px; margin: 0; }
-    header .badge {
-      font-size: 12px; color: var(--muted); border: 1px solid var(--border);
-      border-radius: 999px; padding: 2px 10px;
-    }
     main {
       flex: 1; width: 100%; max-width: 760px; margin: 0 auto; padding: 20px;
       display: flex; flex-direction: column; gap: 12px;
@@ -32,12 +28,27 @@
     .msg.user { align-self: flex-end; background: var(--accent); color: var(--accent-ink); border-bottom-right-radius: 4px; }
     .msg.bot { align-self: flex-start; background: var(--panel); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
     .msg.error { align-self: flex-start; background: #fdecec; border: 1px solid #f5c2c0; color: #8a1f1b; }
-    .sources { margin-top: 8px; font-size: 12px; color: var(--muted); }
-    .sources span {
-      display: inline-block; border: 1px solid var(--border); border-radius: 999px;
-      padding: 1px 8px; margin: 2px 4px 0 0; background: var(--bg);
-    }
     .typing { align-self: flex-start; color: var(--muted); font-size: 13px; padding: 4px 2px; }
+    .support-offer { align-self: flex-start; margin-top: -4px; }
+    .support-offer button {
+      background: none; border: 1px dashed var(--accent); color: var(--accent);
+      font-size: 13px; font-weight: 500; padding: 6px 12px; border-radius: 999px;
+    }
+    header a.support { margin-left: auto; font-size: 13px; color: var(--accent); text-decoration: none; }
+    #support-card {
+      align-self: stretch; background: var(--panel); border: 1px solid var(--border);
+      border-radius: 12px; padding: 16px;
+    }
+    #support-card h2 { font-size: 15px; margin: 0 0 4px; }
+    #support-card p { margin: 0 0 10px; font-size: 13px; color: var(--muted); }
+    #support-card label { display: block; font-size: 12px; color: var(--muted); margin: 8px 0 3px; }
+    #support-card input, #support-card textarea {
+      width: 100%; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px;
+      font: inherit; background: var(--bg); color: var(--ink); box-sizing: border-box;
+    }
+    #support-card .row { display: flex; gap: 10px; margin-top: 12px; }
+    #support-card .error-note { color: #8a1f1b; font-size: 13px; margin-top: 8px; }
+    .hidden { display: none !important; }
     form {
       position: sticky; bottom: 0; background: var(--bg);
       padding: 12px 20px 20px; width: 100%; max-width: 760px; margin: 0 auto;
@@ -59,11 +70,28 @@
 <body>
   <header>
     <h1>{{ tenant.name }} assistant</h1>
-    <span class="badge">{{ tenant.provider }} · {{ tenant.model }}</span>
+    {% if support_enabled %}<a href="#" class="support" id="support-link">Email support</a>{% endif %}
   </header>
 
   <main id="thread">
     <div class="msg bot">Hi! Ask me anything about {{ tenant.name }}&rsquo;s knowledge base.</div>
+    {% if support_enabled %}
+    <div id="support-card" class="hidden">
+      <h2>Ask a human instead</h2>
+      <p>Leave your details and {{ tenant.name }}&rsquo;s team will get your question with the conversation so far, and reply by email.</p>
+      <label for="s-name">Your name</label>
+      <input id="s-name" maxlength="80" autocomplete="name">
+      <label for="s-email">Your email</label>
+      <input id="s-email" type="email" maxlength="254" autocomplete="email">
+      <label for="s-question">Your question</label>
+      <textarea id="s-question" rows="2" maxlength="2000"></textarea>
+      <div class="error-note hidden" id="s-error"></div>
+      <div class="row">
+        <button type="button" id="s-send">Send to the team</button>
+        <button type="button" id="s-cancel" style="background:var(--bg);color:var(--ink);border:1px solid var(--border)">Cancel</button>
+      </div>
+    </div>
+    {% endif %}
   </main>
 
   <form id="chat-form" autocomplete="off">
@@ -82,6 +110,12 @@
       // One conversation per page load; the server replays these turns to the model.
       const conversationId = (crypto.randomUUID && crypto.randomUUID()) || null;
 
+      const supportEnabled = {{ support_enabled|yesno:"true,false" }};
+      // The grounding prompt makes the model admit defeat in words like these;
+      // that admission is the cue to offer a human instead.
+      const NO_ANSWER = /don'?t know|do not know|couldn'?t find|can'?t find|cannot find|don'?t have (?:that|this|any|information)|not (?:in|part of) (?:the|my|this) (?:context|documents|knowledge)/i;
+      let lastQuestion = "";
+
       function add(kind, text) {
         const div = document.createElement("div");
         div.className = "msg " + kind;
@@ -91,28 +125,13 @@
         return div;
       }
 
-      function addSources(target, sources) {
-        if (!sources || !sources.length) return;
-        const box = document.createElement("div");
-        box.className = "sources";
-        box.append("Sources: ");
-        const seen = new Set();
-        sources.forEach(function (s) {
-          if (seen.has(s.source)) return;
-          seen.add(s.source);
-          const chip = document.createElement("span");
-          chip.textContent = s.source;
-          box.appendChild(chip);
-        });
-        target.appendChild(box);
-      }
-
       form.addEventListener("submit", async function (event) {
         event.preventDefault();
         const question = input.value.trim();
         if (!question) return;
 
         add("user", question);
+        lastQuestion = question;
         input.value = "";
         send.disabled = true;
         const typing = document.createElement("div");
@@ -131,8 +150,8 @@
           if (!response.ok) {
             add("error", data.error || "Something went wrong.");
           } else {
-            const bubble = add("bot", data.answer);
-            addSources(bubble, data.sources);
+            add("bot", data.answer);
+            if (supportEnabled && NO_ANSWER.test(data.answer)) offerSupport();
           }
         } catch (err) {
           typing.remove();
@@ -149,6 +168,79 @@
           form.requestSubmit();
         }
       });
+
+      // ---- email-a-human escalation ------------------------------------
+      if (supportEnabled) {
+        const card = document.getElementById("support-card");
+        const sError = document.getElementById("s-error");
+
+        function offerSupport() {
+          const offer = document.createElement("div");
+          offer.className = "support-offer";
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.textContent = "Can’t find what you need? Email our team →";
+          btn.addEventListener("click", function () {
+            offer.remove();
+            openSupport();
+          });
+          offer.appendChild(btn);
+          thread.appendChild(offer);
+          offer.scrollIntoView({ behavior: "smooth", block: "end" });
+        }
+
+        function openSupport() {
+          document.getElementById("s-question").value = lastQuestion;
+          sError.classList.add("hidden");
+          card.classList.remove("hidden");
+          thread.appendChild(card); // keep it at the end of the thread
+          card.scrollIntoView({ behavior: "smooth", block: "end" });
+          document.getElementById("s-name").focus();
+        }
+
+        document.getElementById("support-link").addEventListener("click", function (event) {
+          event.preventDefault();
+          openSupport();
+        });
+        document.getElementById("s-cancel").addEventListener("click", function () {
+          card.classList.add("hidden");
+        });
+
+        document.getElementById("s-send").addEventListener("click", async function () {
+          const name = document.getElementById("s-name").value.trim();
+          const email = document.getElementById("s-email").value.trim();
+          const question = document.getElementById("s-question").value.trim();
+          sError.classList.add("hidden");
+          if (!name || !email || !question) {
+            sError.textContent = "Name, email and the question are all needed.";
+            sError.classList.remove("hidden");
+            return;
+          }
+          this.disabled = true;
+          try {
+            const response = await fetch(window.location.pathname + "escalate/", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "X-CSRFToken": csrf },
+              body: JSON.stringify({
+                name: name, email: email, question: question, conversation_id: conversationId,
+              }),
+            });
+            const data = await response.json();
+            if (!response.ok) {
+              sError.textContent = data.error || "Could not send — please try again.";
+              sError.classList.remove("hidden");
+            } else {
+              card.classList.add("hidden");
+              add("bot", "Thanks, " + name + " — your question is with our team now. They’ll reply to " + email + ".");
+            }
+          } catch (err) {
+            sError.textContent = "Network error — please try again.";
+            sError.classList.remove("hidden");
+          } finally {
+            this.disabled = false;
+          }
+        });
+      }
     })();
   </script>
 </body>
